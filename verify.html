@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN" style="background: url(bg.png) center;background-size: cover;background-attachment: fixed;background-color: #dce3f3;">
+<head>
+    <link rel="icon" href="logo.jpg" type="image/jpg">
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人机验证</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body style="padding-bottom: 400px;background: none;">
+
+    <div class="box card center trans fx" style="--speed:3;max-width: 860px;">
+        <p class="jianbian" style="--colorlt:#44a8ff;--colorrt:#ee5555;font-size: 40px;margin-bottom: 24px;">这是一个人机验证界面,请选择您的身份</p>
+
+        <div id="step1" class="step visible" role="group" aria-labelledby="q1-label">
+            <div id="opts" style="display:flex;gap:16px;justify-content:center;align-items:center;margin: 8px 0 24px 0;">
+                <div class="opt"><input type="radio" id="opt1" name="who" value="1" /><label for="opt1" class="btn btn--opt" style="transition: all 0.3s ease;">人</label></div>
+                <div class="opt"><input type="radio" id="opt2" name="who" value="2" /><label for="opt2" class="btn btn--opt" style="transition: all 0.3s ease;">机</label></div>
+                <div class="opt"><input type="radio" id="opt3" name="who" value="3" /><label for="opt3" class="btn btn--opt" style="transition: all 0.3s ease;">人机</label></div>
+            </div>
+        </div>
+
+        <button id="next" class="btn btn--lg" type="button" disabled aria-disabled="true" style="margin-top: 28px;">下一步</button>
+
+        <p id="msg" class="body" style="color:#ee5555;margin-top: 16px;min-height: 24px;" aria-live="polite" role="status"></p>
+    </div>
+
+    <script>
+    (function(){
+        var btn = document.getElementById('next');
+        var msg = document.getElementById('msg');
+        var step1 = document.getElementById('step1');
+        var radios = Array.prototype.slice.call(document.querySelectorAll('input[name=who]'));
+
+        function setMsg(text){ msg.textContent = text || ''; }
+
+        function enableNext(){ btn.removeAttribute('disabled'); btn.setAttribute('aria-disabled','false'); }
+        function disableNext(){ btn.setAttribute('disabled',''); btn.setAttribute('aria-disabled','true'); }
+
+        function validateRadio(val){
+            if(val === '1'){ 
+                setMsg('恭喜你找到了正确选项！'); 
+                enableNext(); 
+                return true; 
+            }
+            setMsg('请选择正确选项以继续'); 
+            disableNext(); 
+            return false;
+        }
+
+        radios.forEach(function(r){
+            r.addEventListener('change', function(){ validateRadio(r.value); });
+            r.addEventListener('click', function(){ validateRadio(r.value); });
+            r.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.key === ' ') validateRadio(r.value); });
+        });
+
+        btn.addEventListener('click', function(){        
+            if(btn.hasAttribute('disabled')){ return; }
+            var who = radios.find(function(r){ return r.checked; });
+            if(!who || who.value !== '1'){ 
+                setMsg('请选择正确选项以继续'); 
+                disableNext();
+                return; 
+            }
+            
+            // 使用关卡管理器完成当前关卡并跳转到下一关
+            levelManager.completeLevel('verify', {
+                verified: true
+            });
+            
+            // 跳转到注册页面
+            location.href = 'reg.html';
+        });
+
+        function shuffleOptions(){
+            var c = document.getElementById('opts');
+            var arr = Array.prototype.slice.call(c.children);
+            for(var i=arr.length-1;i>0;i--){
+                var j = Math.floor(Math.random()*(i+1));
+                var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+            }
+            arr.forEach(function(n){ c.appendChild(n); });
+        }
+
+        shuffleOptions();
+
+        var shuffleTimer = null;
+        var lastOrder = '';
+        function orderString(){
+            var c = document.getElementById('opts');
+            var ids = Array.prototype.map.call(c.children, function(n){ return n.querySelector('input').id; });
+            return ids.join(',');
+        }
+        function shuffleOptionsLive(){
+            var c = document.getElementById('opts');
+            var arr = Array.prototype.slice.call(c.children);
+            
+            // 添加视觉抖动效果
+            c.style.transition = 'transform 0.1s ease';
+            c.style.transform = 'scale(0.95)';
+            setTimeout(function(){
+                c.style.transform = 'scale(1)';
+            }, 100);
+            
+            // 打乱选项
+            for(var i=arr.length-1;i>0;i--)
+            {
+                var j = Math.floor(Math.random()*(i+1));
+                var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+            }
+            
+            // 重新添加到容器
+            arr.forEach(function(n){ c.appendChild(n); });
+            
+            // 检查是否与上次顺序相同
+            var s = orderString();
+            if(s === lastOrder && arr.length){
+                c.appendChild(c.firstElementChild);
+                s = orderString();
+            }
+            lastOrder = s;
+            
+            // 随机更改提示信息
+            const shuffleMessages = [
+                '哈哈，别想轻易找到正确选项！',
+                '选项跑啦！跑啦！',
+                '你觉得你能抓住我吗？',
+                '再试一次，说不定这次能行！',
+                '选项不听话，一直在动~'
+            ];
+            const randomMessage = shuffleMessages[Math.floor(Math.random() * shuffleMessages.length)];
+            setMsg(randomMessage);
+        }
+        function isNearAny(x,y){
+            var opts = Array.prototype.slice.call(document.querySelectorAll('#opts .opt'));
+            for(var i=0;i<opts.length;i++){
+                var r = opts[i].getBoundingClientRect();
+                var cx = r.left + r.width/2;
+                var cy = r.top + r.height/2;
+                var minX = cx - r.width;
+                var maxX = cx + r.width;
+                var minY = cy - r.height;
+                var maxY = cy + r.height;
+                if(x >= minX && x <= maxX && y >= minY && y <= maxY) return true;
+            }
+            return false;
+        }
+        document.addEventListener('mousemove', function(e){
+            var near = isNearAny(e.clientX, e.clientY);
+            if(near && !shuffleTimer){ shuffleTimer = setInterval(shuffleOptionsLive, 200); }
+            else if(!near && shuffleTimer){ clearInterval(shuffleTimer); shuffleTimer = null; }
+        });
+    })();
+    </script>
+
+    <script src="jq.min.js"></script>
+    <script src="scroll.js"></script>
+    <script src="tracker.js"></script>
+    <script src="level-manager.js"></script>
+    <script src="level-config.js"></script>
+</body>
+</html>

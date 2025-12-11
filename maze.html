@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN" style="background: url(bg.png) center;background-size: cover;background-attachment: fixed;background-color: #dce3f3;">
+<head>
+    <link rel="icon" href="logo.jpg" type="image/jpg">
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交互式迷宫</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body style="padding-bottom: 200px;background: none;">
+    <div class="box card center" style="max-width: 980px;">
+        <p class="tit">交互式迷宫</p>
+        <div class="body" style="padding: 16px;">
+            <div style="display:flex;gap:16px;justify-content:center;align-items:center;margin-bottom:12px;">
+                <button id="restart" class="btn btn--opt" type="button">重新开始</button>
+                <button id="next" class="btn btn--lg" type="button" disabled aria-disabled="true">下一步</button>
+            </div>
+            <div style="display:flex;justify-content:center;">
+                <canvas id="maze" style="background:#fff;border-radius:12px;border:1px solid #ddd;box-shadow:0 8px 24px rgba(0,0,0,.15);touch-action:none"></canvas>
+            </div>
+            <p id="tip" class="body" style="margin-top:12px;color:#666;">在起点处开始移动鼠标，沿通道前进；禁止重复走过的路径。</p>
+        </div>
+    </div>
+
+    <script>
+    (function(){
+        // 设备像素比：用于提升高 DPI 屏幕清晰度（一般取 1、2、3）
+        var dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+        // 画布与绘图上下文：迷宫绘制的承载容器
+        var canvas = document.getElementById('maze');
+        var ctx = canvas.getContext('2d');
+        // 行列数：迷宫规模（增大 rows/cols 提升复杂度与长度）
+        var rows = 20, cols = 20;
+        // 单元格大小：每格的边长（增大 cell 提升通道宽度与整体尺寸）
+        var cell = 30;
+        // 画布内边距：迷宫与画布边缘的留白区域（可按需调大/调小）
+        var pad = 20;
+        // 通道视觉参考宽度：用于计算/说明通道宽度（本实现通道≈cell - 2*gap）
+        var pathW = cell;
+        // 通道与墙的间隙/墙厚：增大 gap 会缩窄通道、加厚分隔墙
+        var gap = 4;
+        // 画布像素尺寸：根据行列与单元尺寸确定总宽高
+        var W = cols * cell + pad * 2;
+        var H = rows * cell + pad * 2;
+        // 物理像素尺寸与 CSS 尺寸映射：结合 dpr 提升绘制清晰度
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.width = W + 'px';
+        canvas.style.height = H + 'px';
+        // 缩放到设备像素比，避免锯齿
+        ctx.scale(dpr, dpr);
+        // 路径线宽与线帽/拐角样式：提升轨迹的平滑度
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        var grid = [];
+        var stack = [];
+        var visited = [];
+        var start = {r:0,c:0};
+        var end = {r:rows-1,c:cols-1};
+        var walls = {};
+        var traversed = new Set();
+        var points = [];
+        var started = false;
+        var lastCell = null;
+        var violations = 0;
+        var flashing = false;
+        var nextBtn = document.getElementById('next');
+        var tip = document.getElementById('tip');
+        var restart = document.getElementById('restart');
+
+        function key(r,c){ return r+','+c; }
+        function edgeKey(a,b){ var s=a.r+','+a.c+'-'+b.r+','+b.c; var t=b.r+','+b.c+'-'+a.r+','+a.c; return a.r<a.r? s : s; }
+        function neighbors(r,c){
+            var n=[];
+            if(r>0) n.push({r:r-1,c:c,dir:'U'});
+            if(r<rows-1) n.push({r:r+1,c:c,dir:'D'});
+            if(c>0) n.push({r:r,c:c-1,dir:'L'});
+            if(c<cols-1) n.push({r:r,c:c+1,dir:'R'});
+            return n;
+        }
+        function carve(){
+            for(var r=0;r<rows;r++){ grid[r]=[]; visited[r]=[]; for(var c=0;c<cols;c++){ grid[r][c]={U:true,D:true,L:true,R:true}; visited[r][c]=false; }}
+            var cr = Math.floor(Math.random()*rows);
+            var cc = Math.floor(Math.random()*cols);
+            cr = start.r; cc = start.c;
+            stack.push({r:cr,c:cc}); visited[cr][cc]=true;
+            while(stack.length){
+                var cur = stack[stack.length-1];
+                var ns = neighbors(cur.r, cur.c).filter(function(o){ return !visited[o.r][o.c]; });
+                if(!ns.length){ stack.pop(); continue; }
+                var pick = ns[Math.floor(Math.random()*ns.length)];
+                if(pick.dir==='U'){ grid[cur.r][cur.c].U=false; grid[pick.r][pick.c].D=false; }
+                else if(pick.dir==='D'){ grid[cur.r][cur.c].D=false; grid[pick.r][pick.c].U=false; }
+                else if(pick.dir==='L'){ grid[cur.r][cur.c].L=false; grid[pick.r][pick.c].R=false; }
+                else if(pick.dir==='R'){ grid[cur.r][cur.c].R=false; grid[pick.r][pick.c].L=false; }
+                visited[pick.r][pick.c]=true;
+                stack.push({r:pick.r,c:pick.c});
+            }
+        }
+        function cellCenter(r,c){ return { x: pad + c*cell + cell/2, y: pad + r*cell + cell/2 }; }
+        function drawMaze(){
+            ctx.clearRect(0,0,W,H);
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0,0,W,H);
+            for(var r=0;r<rows;r++){
+                for(var c=0;c<cols;c++){
+                    var x = pad + c*cell;
+                    var y = pad + r*cell;
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(x+gap,y+gap,cell-gap*2,cell-gap*2);
+                    ctx.fillStyle = '#fff';
+                    if(!grid[r][c].U && r>0){ ctx.fillRect(x+gap, y-gap, cell-gap*2, gap*2); }
+                    if(!grid[r][c].D && r<rows-1){ ctx.fillRect(x+gap, y+cell-gap, cell-gap*2, gap*2); }
+                    if(!grid[r][c].L && c>0){ ctx.fillRect(x-gap, y+gap, gap*2, cell-gap*2); }
+                    if(!grid[r][c].R && c<cols-1){ ctx.fillRect(x+cell-gap, y+gap, gap*2, cell-gap*2); }
+                }
+            }
+            var s = cellCenter(start.r,start.c);
+            var e = cellCenter(end.r,end.c);
+            ctx.fillStyle = '#33cc66';
+            ctx.beginPath(); ctx.arc(s.x, s.y, cell*0.3, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#5599ff';
+            ctx.beginPath(); ctx.arc(e.x, e.y, cell*0.3, 0, Math.PI*2); ctx.fill();
+        }
+        function resetGame(){
+            traversed.clear();
+            points = [];
+            started = false;
+            lastCell = null;
+            violations = 0;
+            flashing = false;
+            nextBtn.setAttribute('disabled',''); nextBtn.setAttribute('aria-disabled','true');
+            tip.textContent = '在起点处开始移动鼠标，沿通道前进；禁止重复走过的路径。';
+            carve();
+            drawMaze();
+        }
+        function flash(){
+            if(flashing) return; flashing = true;
+            var n=0; var id=setInterval(function(){ n++; canvas.style.filter = n%2? 'contrast(1.6) saturate(1.4)' : 'none'; if(n>=6){ clearInterval(id); canvas.style.filter='none'; flashing=false; }}, 80);
+        }
+        function cellFromPos(x,y){
+            var cx = Math.floor((x - pad)/cell);
+            var cy = Math.floor((y - pad)/cell);
+            return { r: cy, c: cx };
+        }
+        function insideMaze(x,y){ return x>=pad && y>=pad && x<=pad+cols*cell && y<=pad+rows*cell; }
+        function openBetween(a,b){
+            if(b.r===a.r-1 && b.c===a.c) return !grid[a.r][a.c].U;
+            if(b.r===a.r+1 && b.c===a.c) return !grid[a.r][a.c].D;
+            if(b.c===a.c-1 && b.r===a.r) return !grid[a.r][a.c].L;
+            if(b.c===a.c+1 && b.r===a.r) return !grid[a.r][a.c].R;
+            return false;
+        }
+        function normEdge(a,b){ return a.r<b.r || (a.r===b.r && a.c<=b.c) ? (a.r+','+a.c+'-'+b.r+','+b.c) : (b.r+','+b.c+'-'+a.r+','+a.c); }
+        function drawPath(){
+            if(points.length<2) return;
+            ctx.save();
+            ctx.strokeStyle = '#ff2222';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for(var i=1;i<points.length;i++) ctx.lineTo(points[i].x, points[i].y);
+            ctx.stroke();
+            ctx.restore();
+        }
+        function redrawAll(){ drawMaze(); drawPath(); }
+        function onMove(ev){
+            var rect = canvas.getBoundingClientRect();
+            var x = ev.clientX - rect.left; var y = ev.clientY - rect.top;
+            if(!insideMaze(x,y)){ tip.textContent='已移出迷宫区域，已阻止绘制'; return; }
+            var curCell = cellFromPos(x,y);
+            if(curCell.r<0||curCell.c<0||curCell.r>=rows||curCell.c>=cols) return;
+            var sCenter = cellCenter(start.r,start.c);
+            var eCenter = cellCenter(end.r,end.c);
+            if(!started){
+                if(Math.hypot(x - sCenter.x, y - sCenter.y) <= cell*0.35){ started = true; lastCell = {r:start.r,c:start.c}; points=[sCenter]; tip.textContent='开始'; redrawAll(); }
+                return;
+            }
+            var targetCell = curCell;
+            if(lastCell && (targetCell.r!==lastCell.r || targetCell.c!==lastCell.c) && openBetween(lastCell, targetCell)){
+                var ek = normEdge(lastCell, targetCell);
+                if(traversed.has(ek)){
+                    flash();
+                    violations++;
+                    if(violations>=2){ tip.textContent='失败：重复走旧路径两次，请重新开始'; resetGame(); }
+                    return;
+                }
+                traversed.add(ek);
+                var a = cellCenter(lastCell.r, lastCell.c);
+                var b = cellCenter(targetCell.r, targetCell.c);
+                points.push(b);
+                lastCell = {r:targetCell.r,c:targetCell.c};
+                redrawAll();
+                if(Math.hypot(b.x - eCenter.x, b.y - eCenter.y) <= 1){
+                    tip.textContent='通关成功';
+                    nextBtn.removeAttribute('disabled'); nextBtn.setAttribute('aria-disabled','false');
+                    confetti();
+                }
+            }
+        }
+        function confetti(){
+            var n=120; var arr=[]; for(var i=0;i<n;i++){ arr.push({x:Math.random()*W,y:-10,vy:2+Math.random()*3,wx:Math.random()*2-1,color:'hsl('+Math.floor(Math.random()*360)+',80%,60%)'}); }
+            var id=setInterval(function(){ ctx.clearRect(0,0,W,H); drawMaze(); drawPath(); arr.forEach(function(p){ p.y+=p.vy; p.x+=p.wx; ctx.fillStyle=p.color; ctx.fillRect(p.x, p.y, 4, 8); }); if(arr.every(function(p){ return p.y>H+20; })){ clearInterval(id); redrawAll(); setTimeout(function(){ window.location='fireworks.html'; }, 300); } }, 16);
+        }
+        canvas.addEventListener('mousemove', onMove);
+        canvas.addEventListener('mouseleave', function(){ tip.textContent='已移出迷宫区域，已阻止绘制'; });
+        restart.addEventListener('click', function(){ resetGame(); });
+        nextBtn.addEventListener('click', function(){ if(nextBtn.hasAttribute('disabled')) return; window.location='index.html'; });
+        resetGame();
+    })();
+    </script>
+
+    <script src="jq.min.js"></script>
+    <script src="scroll.js"></script>
+    <script src="tracker.js"></script>
+    <script src="level-manager.js"></script>
+    <script src="level-config.js"></script>
+    <script>
+        // 使用关卡管理框架管理游戏进度
+        (function() {
+            // 初始化游戏进度
+            function initGameProgress() {
+                // 从关卡管理器加载进度
+                const progress = levelManager.getProgress();
+                console.log('迷宫游戏进度:', progress);
+                
+                // 加载关卡状态
+                const mazeState = levelManager.loadLevelState('maze');
+                if (mazeState) {
+                    console.log('恢复迷宫游戏状态:', mazeState);
+                    // 这里可以根据需要恢复具体的游戏状态
+                }
+            }
+            
+            // 保存游戏进度
+            function saveGameProgress(score = 0, gameState = {}) {
+                // 使用关卡管理器保存进度
+                levelManager.saveLevelState('maze', {
+                    score,
+                    gameState,
+                    completedAt: new Date().toISOString()
+                });
+            }
+            
+            // 完成关卡
+            function completeLevel(data = {}) {
+                // 使用关卡管理器标记关卡完成
+                levelManager.completeLevel('maze', data);
+            }
+            
+            // 页面加载完成后初始化
+            document.addEventListener('DOMContentLoaded', function() {
+                initGameProgress();
+                
+                // 监听迷宫完成事件
+                document.addEventListener('mazeCompleted', function(e) {
+                    completeLevel({
+                        score: e.detail.score,
+                        time: e.detail.time
+                    });
+                });
+            });
+            
+            // 暴露方法供游戏逻辑调用
+            window.GameProgressManager = {
+                saveProgress: saveGameProgress,
+                completeLevel: completeLevel,
+                initProgress: initGameProgress
+            };
+        })();
+    </script>
+</body>
+</html>

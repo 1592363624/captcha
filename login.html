@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en" style="background: url(bg.png) center;background-size: cover;background-attachment: fixed;background-color: #dce3f3;">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - Shell在线工具</title>
+    <link rel="icon" href="logo.jpg" type="image/jpg">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body style="height:100%;background: none;display: flex;justify-content: center;">
+    <script>
+        (function(){
+            function bind(){
+                var btn = document.getElementById('loginBtn');
+                if(!btn) return;
+                btn.addEventListener('click', function(ev){
+                    ev.preventDefault();
+                    var e = document.getElementById('error');
+                    var l = document.getElementById('loading');
+                    if(e){ e.style.color='red'; }
+                    var itel = (document.getElementById('telephone')||{}).value || '';
+                    var ipw = (document.getElementById('pass')||{}).value || '';
+                    if(l) l.style.opacity = 1;
+                    
+                    // 调用API进行登录验证
+                    fetch('api.php?action=login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            telephone: itel,
+                            password: ipw
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if(l) l.style.opacity = 0;
+                        
+                        if(data.success) {
+                            // 登录成功，保存用户信息到sessionStorage
+                            sessionStorage.setItem('user_info', JSON.stringify(data.user));
+                            sessionStorage.setItem('user_tel', itel);
+                            sessionStorage.setItem('user_pw', ipw);
+                            
+                            if(e){ 
+                                e.style.color='#17c400'; 
+                                e.textContent = data.message || '登录成功，正在进入首页'; 
+                                e.style.opacity=1; 
+                            }
+                            setTimeout(function(){ window.location = 'maze.html'; }, 1000);
+                        } else {
+                            // 登录失败
+                            if(e){ 
+                                e.textContent = data.error || '登录失败'; 
+                                e.style.opacity=1; 
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        if(l) l.style.opacity = 0;
+                        if(e){ 
+                            e.textContent = '网络错误，请稍后重试'; 
+                            e.style.opacity=1; 
+                        }
+                    });
+                });
+            }
+            if(document.readyState==='complete' || document.readyState==='interactive') setTimeout(bind,0);
+            else document.addEventListener('DOMContentLoaded', bind);
+        })();
+    </script>
+    <div class="box card" style="width: 40%;position: absolute;top:calc(50% - 125px);height: 250px;min-width: 500px;margin: 0;">
+        <p class="tit">登录</p>
+        <div class="body" style="padding: 0px 20px 20px 20px;">
+            <p id="error" style="color:red;margin: 0;opacity: 0;transition: 100ms;">此电话尚未注册</p>
+            <div style="display: flex;">
+                <p style="width: 50px;margin: 0;padding: 5px 0;">电话</p>
+                <input id="telephone" class="inp" style="flex-grow: 1;">
+            </div>
+            <div style="display: flex;margin-top: 5px;">
+                <p style="width: 50px;margin: 0;padding: 5px 0;">密码</p>
+                <input id="pass" type="password" class="inp" style="flex-grow: 1;">
+            </div>
+            <p>没有账号?<a href="reg.html" class="jump">注册</a></p>
+            <loading style="position: absolute;right: 80px;bottom: 10px;opacity: 0;transition: 100ms;" id="loading">
+                <svg width="28px" height="28px" viewBox="0 0 16 16"><circle cx="8px" cy="8px" r="7px"></circle><circle cx="8px" cy="8px" r="6px"></circle></svg>
+            </loading>
+            <a id="loginBtn" class="btn" style="position: absolute;right: 10px;bottom: 10px;">登录</a>
+        </div>
+    </div>
+    <script src="jq.min.js"></script>
+    <script src="scroll.js"></script>
+    <script src="tracker.js"></script>
+    <script src="level-manager.js"></script>
+    <script src="level-config.js"></script>
+</body>
+</html>

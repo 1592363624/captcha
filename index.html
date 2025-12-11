@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" style="background: url(bg.png) center;background-size: cover;background-attachment: fixed;background-color: #dce3f3;">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>逻辑迷宫</title>
+    <link rel="icon" href="logo.jpg" type="image/jpg">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body style="padding-bottom: 500px;background: none;">
+    <div class="box" id="title">
+        <h1>逻辑迷宫</h1>
+        <p class="info" style="--left:200px;">Developed by Shell</p>
+        <div id="user-info" style="position: absolute; top: 20px; right: 20px; text-align: right;"></div>
+    </div>
+    <div class="box text center">
+        <p style="font-size: 30px;">欢迎使用</p>
+        <br>
+        <p class="jianbian" style="--colorlt:#44a8ff;--colorrt:#ee5555;font-size: 80px;">逻辑迷宫 - 注册成功之后登录就可以保存进度咯!</p>
+        <p class="body">
+            轻量级网页设计，工具全在线，随时随地打开浏览器即可使用工具，支持多设备同时使用，方便快捷
+        </p>
+                <p class="body">
+            一个充满恶作剧的益智游戏 - 观察、思考，然后被戏弄.
+        </p>
+                <a href="verify.html"  class="jianbian" style="--colorlt:#44a8ff;--colorrt:#ee5555;font-size: 40px;margin: 0 0 60px 0;display: inline-block;">
+            注册账号开始使用
+        </a>
+        <p class="body">
+        </p>
+    </div>
+
+
+    <script src="jq.min.js"></script>
+    <script src="scroll.js"></script>
+    <script src="tracker.js"></script>
+    <script src="level-manager.js"></script>
+    <script src="level-config.js"></script>
+    <script>
+        // 用户信息和游戏进度管理
+        (function() {
+            // 显示用户信息
+            function showUserInfo() {
+                const userInfoStr = sessionStorage.getItem('user_info');
+                const userInfoDiv = document.getElementById('user-info');
+                
+                if (userInfoStr) {
+                    const userInfo = JSON.parse(userInfoStr);
+                    userInfoDiv.innerHTML = `
+                        <div style="color: #1a5fb4; font-weight: bold; text-shadow: 0 0 2px rgba(255,255,255,0.8);">欢迎，用户 ${userInfo.telephone || '未知'}</div>
+                        <div style="font-size: 13px; color: #333; text-shadow: 0 0 2px rgba(255,255,255,0.8);">
+                            登录次数: ${userInfo.login_count || 0}<br>
+                            注册时间: ${new Date(userInfo.created_at).toLocaleString()}<br>
+                            <a href="#" onclick="logout()" style="color: #c0392b; text-decoration: none; font-weight: bold;">退出登录</a>
+                        </div>
+                    `;
+                } else {
+                    userInfoDiv.innerHTML = `
+                        <div style="font-size: 14px; color: #2c3e50; text-shadow: 0 0 2px rgba(255,255,255,0.8);">
+                            <a href="login.html" style="color: #1a5fb4; text-decoration: none; font-weight: bold;">登录</a> | 
+                            <a href="reg.html" style="color: #27ae60; text-decoration: none; font-weight: bold;">注册</a>
+                        </div>
+                    `;
+                }
+            }
+            
+            // 退出登录
+            window.logout = function() {
+                sessionStorage.removeItem('user_info');
+                sessionStorage.removeItem('user_tel');
+                sessionStorage.removeItem('user_pw');
+                window.location.reload();
+            };
+            
+            // 加载游戏进度
+            function loadGameProgress() {
+                const userInfoStr = sessionStorage.getItem('user_info');
+                if (!userInfoStr) return;
+                
+                const userInfo = JSON.parse(userInfoStr);
+                
+                // 可以根据不同游戏类型加载不同的进度
+                const gameTypes = ['maze', 'fireworks', 'robot'];
+                
+                gameTypes.forEach(gameType => {
+                    fetch(`api.php?action=get_progress&user_id=${userInfo.id}&game_type=${gameType}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success && data.progress) {
+                                // 保存进度到sessionStorage，方便游戏页面使用
+                                sessionStorage.setItem(`${gameType}_progress`, JSON.stringify(data.progress));
+                                console.log(`加载${gameType}游戏进度成功:`, data.progress);
+                            }
+                        })
+                        .catch(error => {
+                            console.error(`加载${gameType}游戏进度失败:`, error);
+                        });
+                });
+            }
+            
+            // 获取所有用户的游戏进度
+            function getAllUsersProgress() {
+                fetch('api.php?action=get_all_users')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.users.length > 0) {
+                            // 显示用户进度概览
+                            showUsersProgress(data.users);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('获取所有用户进度失败:', error);
+                    });
+            }
+            
+            // 显示用户进度概览
+            function showUsersProgress(users) {
+                // 创建进度展示区域
+                const progressDiv = document.createElement('div');
+                progressDiv.className = 'box text center';
+                progressDiv.innerHTML = `
+                    <h2>用户游戏进度概览</h2>
+                    <div id="progress-list" style="display: flex; flex-wrap: wrap; gap: 20px; justify-content: center;"></div>
+                `;
+                
+                // 插入到页面中
+                const container = document.querySelector('.box.text.center');
+                container.parentNode.insertBefore(progressDiv, container.nextSibling);
+                
+                // 添加进度卡片
+                const progressList = document.getElementById('progress-list');
+                users.forEach(user => {
+                    const progressCard = document.createElement('div');
+                    progressCard.style.cssText = `
+                        background: #f8f9fa;
+                        padding: 20px;
+                        border-radius: 8px;
+                        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                        width: 300px;
+                        text-align: left;
+                    `;
+                    
+                    let progressInfo = '';
+                    if (user.level_data) {
+                        const levelData = user.level_data;
+                        const completedLevels = levelData.completed || [];
+                        progressInfo = `
+                            <div>游戏类型: ${user.game_type || '未知'}</div>
+                            <div>已通过关卡: ${completedLevels.length}</div>
+                            <div>总分: ${user.total_score || 0}</div>
+                            <div>最后游玩: ${new Date(user.last_played).toLocaleString()}</div>
+                        `;
+                    }
+                    
+                    progressCard.innerHTML = `
+                        <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px;">
+                            用户 ${user.telephone || '未知'}
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                            注册时间: ${new Date(user.created_at).toLocaleString()}<br>
+                            最后登录: ${user.last_login ? new Date(user.last_login).toLocaleString() : '从未登录'}
+                        </div>
+                        ${progressInfo}
+                    `;
+                    
+                    progressList.appendChild(progressCard);
+                });
+            }
+            
+            // 页面加载完成后初始化
+            document.addEventListener('DOMContentLoaded', function() {
+                showUserInfo();
+                loadGameProgress();
+                getAllUsersProgress();
+            });
+        })();
+    </script>
+</body>
+</html>
