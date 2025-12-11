@@ -147,6 +147,58 @@
             return { r: cy, c: cx };
         }
         function insideMaze(x,y){ return x>=pad && y>=pad && x<=pad+cols*cell && y<=pad+rows*cell; }
+        /**
+         * 检测鼠标位置是否碰撞墙体
+         * @param {number} x - 鼠标在画布上的x坐标
+         * @param {number} y - 鼠标在画布上的y坐标
+         * @returns {boolean} - 是否碰撞墙体
+         */
+        function isCollidingWithWall(x,y){
+            // 计算当前鼠标所在的单元格
+            var cx = Math.floor((x - pad)/cell);
+            var cy = Math.floor((y - pad)/cell);
+            
+            // 检查是否在迷宫范围内
+            if(cx < 0 || cx >= cols || cy < 0 || cy >= rows){
+                return true;
+            }
+            
+            // 计算单元格内的相对坐标
+            var rx = x - (pad + cx * cell);
+            var ry = y - (pad + cy * cell);
+            
+            // 快速检查：如果在单元格的边界墙区域，直接返回碰撞
+            if(rx < gap || rx > cell - gap || ry < gap || ry > cell - gap){
+                return true;
+            }
+            
+            // 检查单元格之间的内部墙
+            // 计算单元格的四个边缘缓冲区
+            var edgeBuffer = gap + 2; // 边缘缓冲区，用于检测靠近墙的情况
+            
+            // 检查左侧墙：鼠标靠近左侧边缘，且当前单元格左侧有墙
+            if(rx < edgeBuffer && cx > 0 && grid[cy][cx].L){
+                return true;
+            }
+            
+            // 检查右侧墙：鼠标靠近右侧边缘，且当前单元格右侧有墙
+            if(rx > cell - edgeBuffer && cx < cols - 1 && grid[cy][cx].R){
+                return true;
+            }
+            
+            // 检查上侧墙：鼠标靠近上侧边缘，且当前单元格上侧有墙
+            if(ry < edgeBuffer && cy > 0 && grid[cy][cx].U){
+                return true;
+            }
+            
+            // 检查下侧墙：鼠标靠近下侧边缘，且当前单元格下侧有墙
+            if(ry > cell - edgeBuffer && cy < rows - 1 && grid[cy][cx].D){
+                return true;
+            }
+            
+            // 鼠标在可通行区域内，且未碰撞任何墙
+            return false;
+        }
         function openBetween(a,b){
             if(b.r===a.r-1 && b.c===a.c) return !grid[a.r][a.c].U;
             if(b.r===a.r+1 && b.c===a.c) return !grid[a.r][a.c].D;
@@ -171,6 +223,15 @@
             var rect = canvas.getBoundingClientRect();
             var x = ev.clientX - rect.left; var y = ev.clientY - rect.top;
             if(!insideMaze(x,y)){ tip.textContent='已移出迷宫区域，已阻止绘制'; return; }
+            
+            // 检测是否碰撞墙体
+            if(isCollidingWithWall(x, y)){
+                flash();
+                tip.textContent='失败：碰到墙体，请重新开始';
+                resetGame();
+                return;
+            }
+            
             var curCell = cellFromPos(x,y);
             if(curCell.r<0||curCell.c<0||curCell.r>=rows||curCell.c>=cols) return;
             var sCenter = cellCenter(start.r,start.c);
